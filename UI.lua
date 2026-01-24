@@ -1235,6 +1235,7 @@
             local isDragging = false
             local dragStartPos = nil
             local dragThreshold = 5
+            local uiVisible = true
             
             ToggleButton.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1252,14 +1253,21 @@
                 end
             end)
             
+            local function toggleUI()
+                uiVisible = not uiVisible
+                -- Toggle all windows in Library.Items except the toggle button
+                for _, child in ipairs(Library.Items:GetChildren()) do
+                    if child ~= ToggleButton and child.Name ~= "ToggleButton" and child:IsA("Frame") then
+                        child.Visible = uiVisible
+                    end
+                end
+            end
+            
             ToggleButton.InputEnded:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     if not isDragging then
                         -- It's a click, toggle the UI
-                        Library.Items.Enabled = not Library.Items.Enabled
-                        if Items and Items.Window then
-                            Items.Window.Visible = Library.Items.Enabled
-                        end
+                        toggleUI()
                     end
                     isDragging = false
                     dragStartPos = nil
@@ -1267,7 +1275,6 @@
             end)
             
             makeDraggable(ToggleButton)
-            end)
 
             local Items = Cfg.Items; do
                 Items.Window = Library:Create("Frame", {
