@@ -1256,67 +1256,49 @@
                 end
             end
 
-            local dragConn, dragging = nil, false
-            local startInput, startAbsPos = nil, nil
+            local isDragging = false
+            local dragStart = nil
+            local buttonStart = nil
             
-            ToggleButton.InputBegan:Connect(function(input)
-                if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-                    return
-                end
-
-                startInput = Vector2.new(input.Position.X, input.Position.Y)
-                startAbsPos = Vector2.new(ToggleButton.AbsolutePosition.X, ToggleButton.AbsolutePosition.Y)
-                dragging = false
-
-                if dragConn then
-                    dragConn:Disconnect()
-                    dragConn = nil
-                end
-
-                dragConn = UIS.InputChanged:Connect(function(moveInput)
-                    if moveInput.UserInputType ~= Enum.UserInputType.MouseMovement and moveInput.UserInputType ~= Enum.UserInputType.Touch then
-                        return
-                    end
-
-                    local currentPos = Vector2.new(moveInput.Position.X, moveInput.Position.Y)
-                    local delta = currentPos - startInput
-                    
-                    if delta.Magnitude > dragThreshold then
-                        dragging = true
-                    end
-
-                    -- Always update position during drag, not just after threshold
-                    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
-                    local buttonSize = ToggleButton.AbsoluteSize
-
-                    local newAbsX = startAbsPos.X + delta.X
-                    local newAbsY = startAbsPos.Y + delta.Y
-
-                    if viewport then
-                        newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
-                        newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
-                    end
-
-                    ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
-                end)
+            ToggleButton.MouseButton1Down:Connect(function()
+                isDragging = false
+                dragStart = UIS:GetMouseLocation()
+                buttonStart = ToggleButton.AbsolutePosition
             end)
 
-            ToggleButton.InputEnded:Connect(function(input)
-                if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-                    return
-                end
-
-                if dragConn then
-                    dragConn:Disconnect()
-                    dragConn = nil
-                end
-
-                -- Only toggle if we didn't drag
-                if not dragging then
+            ToggleButton.MouseButton1Up:Connect(function()
+                if not isDragging then
                     setUIVisible(not uiVisible)
                 end
-                
-                dragging = false
+                isDragging = false
+                dragStart = nil
+                buttonStart = nil
+            end)
+
+            UIS.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    if dragStart and buttonStart then
+                        local currentMouse = UIS:GetMouseLocation()
+                        local delta = currentMouse - dragStart
+                        
+                        if delta.Magnitude > dragThreshold then
+                            isDragging = true
+                        end
+                        
+                        if isDragging then
+                            local viewport = workspace.CurrentCamera.ViewportSize
+                            local buttonSize = ToggleButton.AbsoluteSize
+                            
+                            local newX = buttonStart.X + delta.X
+                            local newY = buttonStart.Y + delta.Y
+                            
+                            newX = math.clamp(newX, 0, viewport.X - buttonSize.X)
+                            newY = math.clamp(newY, 0, viewport.Y - buttonSize.Y)
+                            
+                            ToggleButton.Position = UDim2.fromOffset(newX, newY)
+                        end
+                    end
+                end
             end)
 
             local Items = Cfg.Items; do
