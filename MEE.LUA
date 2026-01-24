@@ -1245,6 +1245,7 @@
                 Library.Other.Enabled = false
                 Library.ToggleGui.Enabled = true
 
+                -- Close any open elements when hiding UI
                 if not visible then
                     if Library.OpenElement and Library.OpenElement.SetVisible then
                         pcall(function()
@@ -1255,15 +1256,17 @@
                 end
             end
 
-            local dragConn
+            local dragConn, dragging = nil, false
+            local startInput, startAbsPos = nil, nil
+            
             ToggleButton.InputBegan:Connect(function(input)
                 if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
                     return
                 end
 
-                local startInput = input.Position
-                local startAbsPos = ToggleButton.AbsolutePosition
-                local moved = false
+                startInput = input.Position
+                startAbsPos = ToggleButton.AbsolutePosition
+                dragging = false
 
                 if dragConn then
                     dragConn:Disconnect()
@@ -1277,35 +1280,42 @@
 
                     local delta = moveInput.Position - startInput
                     if delta.Magnitude > dragThreshold then
-                        moved = true
+                        dragging = true
                     end
 
-                    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
-                    local buttonSize = ToggleButton.AbsoluteSize
+                    if dragging then
+                        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+                        local buttonSize = ToggleButton.AbsoluteSize
 
-                    local newAbsX = startAbsPos.X + delta.X
-                    local newAbsY = startAbsPos.Y + delta.Y
+                        local newAbsX = startAbsPos.X + delta.X
+                        local newAbsY = startAbsPos.Y + delta.Y
 
-                    if viewport then
-                        newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
-                        newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
-                    end
-
-                    ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
-                end)
-
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        if dragConn then
-                            dragConn:Disconnect()
-                            dragConn = nil
+                        if viewport then
+                            newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
+                            newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
                         end
 
-                        if not moved then
-                            setUIVisible(not uiVisible)
-                        end
+                        ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
                     end
                 end)
+            end)
+
+            ToggleButton.InputEnded:Connect(function(input)
+                if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+                    return
+                end
+
+                if dragConn then
+                    dragConn:Disconnect()
+                    dragConn = nil
+                end
+
+                -- Only toggle if we didn't drag
+                if not dragging then
+                    setUIVisible(not uiVisible)
+                end
+                
+                dragging = false
             end)
 
             local Items = Cfg.Items; do
