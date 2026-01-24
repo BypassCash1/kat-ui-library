@@ -1231,13 +1231,42 @@
                 Font = Enum.Font.GothamBold;
             })
 
-            makeDraggable(ToggleButton)
-
-            ToggleButton.MouseButton1Click:Connect(function()
-                Library.Items.Enabled = not Library.Items.Enabled
-                if Items and Items.Window then
-                    Items.Window.Visible = Library.Items.Enabled
+            -- Handle drag vs click for toggle button
+            local isDragging = false
+            local dragStartPos = nil
+            local dragThreshold = 5
+            
+            ToggleButton.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = false
+                    dragStartPos = input.Position
                 end
+            end)
+            
+            ToggleButton.InputChanged:Connect(function(input)
+                if dragStartPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local delta = (input.Position - dragStartPos).Magnitude
+                    if delta > dragThreshold then
+                        isDragging = true
+                    end
+                end
+            end)
+            
+            ToggleButton.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    if not isDragging then
+                        -- It's a click, toggle the UI
+                        Library.Items.Enabled = not Library.Items.Enabled
+                        if Items and Items.Window then
+                            Items.Window.Visible = Library.Items.Enabled
+                        end
+                    end
+                    isDragging = false
+                    dragStartPos = nil
+                end
+            end)
+            
+            makeDraggable(ToggleButton)
             end)
 
             local Items = Cfg.Items; do
@@ -1389,7 +1418,7 @@
                 }); Library:Themify(Items.Fade, "background", "BackgroundColor3")
 
                 Items.Glow = Library:Create("ImageLabel", {
-                    ImageColor3 = rgb(255, 0, 0);
+                    ImageColor3 = themes.preset.accent;
                     ScaleType = Enum.ScaleType.Slice;
                     ImageTransparency = 0.6499999761581421;
                     BorderColor3 = rgb(0, 0, 0);
@@ -2294,15 +2323,15 @@
                     
                     Items.DropdownHolder = Library:Create( "ScrollingFrame" , {
                         Parent = Items.DropdownElements;
-                        Size = dim2(1, -2, 1, -2);
-                        CanvasSize = dim2(1, 0, 0, 0);
+                        Size = dim2(1, -2, 0, 200);
+                        CanvasSize = dim2(0, 0, 0, 0);
                         ScrollBarThickness = 4;
                         ScrollBarImageColor3 = themes.preset.accent;
                         Name = "\0";
                         Position = dim2(0, 1, 0, 1);
                         BorderColor3 = rgb(0, 0, 0);
                         BorderSizePixel = 0;
-                        AutomaticSize = Enum.AutomaticSize.Y;
+                        AutomaticCanvasSize = Enum.AutomaticSize.Y;
                         BackgroundColor3 = rgb(31, 31, 31)
                     });
                     
@@ -2354,7 +2383,14 @@
             
             function Cfg.SetVisible(bool)
                 Items.DropdownElements.Position = dim2(0, Items.Outline.AbsolutePosition.X, 0, Items.Outline.AbsolutePosition.Y + 80)
-				Items.DropdownElements.Size = dim_offset(Items.Outline.AbsoluteSize.X + 1, 0)
+                
+                -- Calculate appropriate height based on content, with max of 200
+                local contentHeight = Items.DropdownHolder.UIListLayout.AbsoluteContentSize.Y + 4
+                local maxHeight = 200
+                local actualHeight = math.min(contentHeight, maxHeight)
+                
+                Items.DropdownElements.Size = dim_offset(Items.Outline.AbsoluteSize.X + 1, actualHeight)
+                Items.DropdownHolder.Size = dim2(1, -2, 0, actualHeight - 2)
                 Items.DropdownElements.Visible = bool 
                 Items.DropdownElements.Parent = bool and Library.Items or Library.Other
 
