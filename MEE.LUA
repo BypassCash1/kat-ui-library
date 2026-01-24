@@ -1264,8 +1264,8 @@
                     return
                 end
 
-                startInput = input.Position
-                startAbsPos = ToggleButton.AbsolutePosition
+                startInput = Vector2.new(input.Position.X, input.Position.Y)
+                startAbsPos = Vector2.new(ToggleButton.AbsolutePosition.X, ToggleButton.AbsolutePosition.Y)
                 dragging = false
 
                 if dragConn then
@@ -1278,25 +1278,26 @@
                         return
                     end
 
-                    local delta = moveInput.Position - startInput
+                    local currentPos = Vector2.new(moveInput.Position.X, moveInput.Position.Y)
+                    local delta = currentPos - startInput
+                    
                     if delta.Magnitude > dragThreshold then
                         dragging = true
                     end
 
-                    if dragging then
-                        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
-                        local buttonSize = ToggleButton.AbsoluteSize
+                    -- Always update position during drag, not just after threshold
+                    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+                    local buttonSize = ToggleButton.AbsoluteSize
 
-                        local newAbsX = startAbsPos.X + delta.X
-                        local newAbsY = startAbsPos.Y + delta.Y
+                    local newAbsX = startAbsPos.X + delta.X
+                    local newAbsY = startAbsPos.Y + delta.Y
 
-                        if viewport then
-                            newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
-                            newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
-                        end
-
-                        ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
+                    if viewport then
+                        newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
+                        newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
                     end
+
+                    ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
                 end)
             end)
 
