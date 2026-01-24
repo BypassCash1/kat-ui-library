@@ -1214,78 +1214,94 @@
                 ResetOnSpawn = false;
             })
 
-            -- Toggle Button
-            local ToggleButton = Library:Create("TextButton", {
-                Parent = Library.ToggleGui;
-                Name = "ToggleButton";
-                Position = dim2(1, -60, 0, 10);
-                Size = dim2(0, 50, 0, 50);
-                BackgroundColor3 = rgb(0, 0, 0);
-                BorderColor3 = rgb(0, 0, 0);
-                BorderSizePixel = 0;
-                Text = "";
-                ZIndex = 1000;
-            })
-
-            Library:Create("UICorner", {
-                Parent = ToggleButton;
-                CornerRadius = dim(0, 4);
-            })
-
-            -- Click vs drag-safe toggle button (dragging won't toggle the UI)
+            -- Mobile detection
             local UIS = game:GetService("UserInputService")
-            local uiVisible = true
-            local dragThreshold = 5
+            local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
-            local function setUIVisible(visible)
-                uiVisible = visible
-                Library.Items.Enabled = visible
-                -- Library.Other is a hidden container for popups when closed.
-                -- Keeping it disabled prevents dropdowns/menus from showing at startup.
-                Library.Other.Enabled = false
-                Library.ToggleGui.Enabled = true
+            -- Toggle Button (mobile only)
+            if isMobile then
+                local ToggleButton = Library:Create("TextButton", {
+                    Parent = Library.ToggleGui;
+                    Name = "ToggleButton";
+                    Position = dim2(1, -60, 0, 10);
+                    Size = dim2(0, 50, 0, 50);
+                    BackgroundColor3 = rgb(0, 0, 0);
+                    BorderColor3 = rgb(0, 0, 0);
+                    BorderSizePixel = 0;
+                    Text = "";
+                    ZIndex = 1000;
+                })
 
-                -- Close any open elements when hiding UI
-                if not visible then
-                    if Library.OpenElement and Library.OpenElement.SetVisible then
-                        pcall(function()
-                            Library.OpenElement.SetVisible(false)
-                            Library.OpenElement.Open = false
-                        end)
+                Library:Create("UICorner", {
+                    Parent = ToggleButton;
+                    CornerRadius = dim(0, 4);
+                })
+
+                -- Click vs drag-safe toggle button (dragging won't toggle the UI)
+                local uiVisible = true
+                local dragThreshold = 5
+
+                local function setUIVisible(visible)
+                    uiVisible = visible
+                    Library.Items.Enabled = visible
+                    Library.Other.Enabled = false
+                    Library.ToggleGui.Enabled = true
+
+                    if not visible then
+                        if Library.OpenElement and Library.OpenElement.SetVisible then
+                            pcall(function()
+                                Library.OpenElement.SetVisible(false)
+                                Library.OpenElement.Open = false
+                            end)
+                        end
                     end
                 end
-            end
 
-            local isDragging = false
-            local dragStart = nil
-            local buttonStart = nil
-            
-            ToggleButton.MouseButton1Down:Connect(function()
-                isDragging = false
-                dragStart = UIS:GetMouseLocation()
-                buttonStart = ToggleButton.AbsolutePosition
-            end)
-
-            ToggleButton.MouseButton1Up:Connect(function()
-                if not isDragging then
-                    setUIVisible(not uiVisible)
-                end
-                isDragging = false
-                dragStart = nil
-                buttonStart = nil
-            end)
-
-            UIS.InputChanged:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseMovement then
-                    if dragStart and buttonStart then
-                        local currentMouse = UIS:GetMouseLocation()
-                        local delta = currentMouse - dragStart
-                        
-                        if delta.Magnitude > dragThreshold then
-                            isDragging = true
+                local isDragging = false
+                local dragStart = nil
+                local buttonStart = nil
+                local dragConnection = nil
+                
+                ToggleButton.InputBegan:Connect(function(input)
+                    if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+                        return
+                    end
+                    
+                    isDragging = false
+                    dragStart = input.Position
+                    buttonStart = ToggleButton.AbsolutePosition
+                    
+                    if dragConnection then
+                        dragConnection:Disconnect()
+                    end
+                    
+                    dragConnection = input.Changed:Connect(function()
+                        if input.UserInputState == Enum.UserInputState.End then
+                            if dragConnection then
+                                dragConnection:Disconnect()
+                                dragConnection = nil
+                            end
+                            
+                            if not isDragging then
+                                setUIVisible(not uiVisible)
+                            end
+                            
+                            isDragging = false
+                            dragStart = nil
+                            buttonStart = nil
                         end
-                        
-                        if isDragging then
+                    end)
+                end)
+
+                UIS.InputChanged:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                        if dragStart and buttonStart then
+                            local delta = input.Position - dragStart
+                            
+                            if delta.Magnitude > dragThreshold then
+                                isDragging = true
+                            end
+                            
                             local viewport = workspace.CurrentCamera.ViewportSize
                             local buttonSize = ToggleButton.AbsoluteSize
                             
@@ -1298,8 +1314,8 @@
                             ToggleButton.Position = UDim2.fromOffset(newX, newY)
                         end
                     end
-                end
-            end)
+                end)
+            end
 
             local Items = Cfg.Items; do
                 Items.Window = Library:Create("Frame", {
