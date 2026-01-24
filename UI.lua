@@ -837,7 +837,8 @@
                     Library:Create( "UIGradient" , {
                         Rotation = 90;
                         Parent = Items.hue_drag;
-                        Color = rgbseq{rgbkey(0, rgb(255, 0, 0)), rgbkey(0.17, rgb(255, 255, 0)), rgbkey(0.33, rgb(0, 255, 0)), rgbkey(0.5, rgb(0, 255, 255)), rgbkey(0.67, rgb(0, 0, 255)), rgbkey(0.83, rgb(255, 0, 255)), rgbkey(1, rgb(255, 0, 0))}
+                        -- Green-only (no red/rainbow)
+                        Color = rgbseq{rgbkey(0, themes.preset.accent), rgbkey(1, themes.preset.accent)}
                     });
                     
                     Items.HuePicker = Library:Create( "Frame" , {
@@ -1194,6 +1195,16 @@
                 ResetOnSpawn = false; -- helpful for mobile
             })
 
+            -- Separate GUI so the toggle button never disappears when hiding the UI
+            Library.ToggleGui = Library:Create("ScreenGui", {
+                Parent = CoreGui;
+                Name = "\0";
+                Enabled = true;
+                ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
+                IgnoreGuiInset = true;
+                ResetOnSpawn = false;
+            })
+
             Library.Other = Library:Create("ScreenGui", {
                 Parent = CoreGui;
                 Name = "\0";
@@ -1205,7 +1216,7 @@
 
             -- Toggle Button
             local ToggleButton = Library:Create("TextButton", {
-                Parent = Library.Items;
+                Parent = Library.ToggleGui;
                 Name = "ToggleButton";
                 Position = dim2(1, -60, 0, 10);
                 Size = dim2(0, 50, 0, 50);
@@ -1231,50 +1242,70 @@
                 Font = Enum.Font.GothamBold;
             })
 
-            -- Handle drag vs click for toggle button
-            local isDragging = false
-            local dragStartPos = nil
-            local dragThreshold = 5
+            -- Click vs drag-safe toggle button (dragging won't toggle the UI)
+            local UIS = game:GetService("UserInputService")
             local uiVisible = true
-            
-            ToggleButton.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    isDragging = false
-                    dragStartPos = input.Position
-                end
-            end)
-            
-            ToggleButton.InputChanged:Connect(function(input)
-                if dragStartPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                    local delta = (input.Position - dragStartPos).Magnitude
-                    if delta > dragThreshold then
-                        isDragging = true
-                    end
-                end
-            end)
-            
-            local function toggleUI()
-                uiVisible = not uiVisible
-                -- Toggle all windows in Library.Items except the toggle button
-                for _, child in ipairs(Library.Items:GetChildren()) do
-                    if child ~= ToggleButton and child.Name ~= "ToggleButton" and child:IsA("Frame") then
-                        child.Visible = uiVisible
-                    end
-                end
+            local dragThreshold = 5
+
+            local function setUIVisible(visible)
+                uiVisible = visible
+                Library.Items.Enabled = visible
+                Library.Other.Enabled = visible
+                Library.ToggleGui.Enabled = true
             end
-            
-            ToggleButton.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    if not isDragging then
-                        -- It's a click, toggle the UI
-                        toggleUI()
-                    end
-                    isDragging = false
-                    dragStartPos = nil
+
+            local dragConn
+            ToggleButton.InputBegan:Connect(function(input)
+                if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+                    return
                 end
+
+                local startInput = input.Position
+                local startAbsPos = ToggleButton.AbsolutePosition
+                local moved = false
+
+                if dragConn then
+                    dragConn:Disconnect()
+                    dragConn = nil
+                end
+
+                dragConn = UIS.InputChanged:Connect(function(moveInput)
+                    if moveInput.UserInputType ~= Enum.UserInputType.MouseMovement and moveInput.UserInputType ~= Enum.UserInputType.Touch then
+                        return
+                    end
+
+                    local delta = moveInput.Position - startInput
+                    if delta.Magnitude > dragThreshold then
+                        moved = true
+                    end
+
+                    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+                    local buttonSize = ToggleButton.AbsoluteSize
+
+                    local newAbsX = startAbsPos.X + delta.X
+                    local newAbsY = startAbsPos.Y + delta.Y
+
+                    if viewport then
+                        newAbsX = math.clamp(newAbsX, 0, math.max(0, viewport.X - buttonSize.X))
+                        newAbsY = math.clamp(newAbsY, 0, math.max(0, viewport.Y - buttonSize.Y))
+                    end
+
+                    ToggleButton.Position = UDim2.fromOffset(newAbsX, newAbsY)
+                end)
+
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        if dragConn then
+                            dragConn:Disconnect()
+                            dragConn = nil
+                        end
+
+                        if not moved then
+                            setUIVisible(not uiVisible)
+                        end
+                    end
+                end)
             end)
-            
-            makeDraggable(ToggleButton)
 
             local Items = Cfg.Items; do
                 Items.Window = Library:Create("Frame", {
@@ -1365,6 +1396,7 @@
                     BorderColor3 = rgb(0, 0, 0);
                     Size = dim2(1, 0, 0, 43);
                     BorderSizePixel = 0;
+                    Active = true;
                     BackgroundColor3 = rgb(255, 255, 255)
                 });
 
@@ -1461,7 +1493,8 @@
                     end
                 end
 
-                Items.Window.InputBegan:Connect(function(input)
+                -- Drag from header only (prevents breaking TextBox/Dropdown touches on mobile)
+                Items.TitleHolder.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                         Dragging = true
                         DragStart = input.Position
@@ -1475,7 +1508,7 @@
                     end
                 end)
 
-                Items.Window.InputChanged:Connect(function(input)
+                Items.TitleHolder.InputChanged:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
                         DragInput = input
                     end
@@ -2261,7 +2294,7 @@
                     });	Library:Themify(Items.Title, "text_color", "BackgroundColor3")
                     
                     Items.Outline = Library:Create( "TextButton" , {
-                        Active = false;
+                        Active = true;
                         BorderColor3 = rgb(0, 0, 0);
                         Text = "";
                         AutoButtonColor = false;
@@ -2269,7 +2302,7 @@
                         Name = "\0";
                         Position = dim2(0, 0, 0, 21);
                         Size = dim2(1, 0, 0, 20);
-                        Selectable = false;
+                        Selectable = true;
                         BorderSizePixel = 0;
                         BackgroundColor3 = themes.preset.inline
                     });	Library:Themify(Items.Outline, "inline", "BackgroundColor3")
@@ -2324,7 +2357,7 @@
                         Position = dim2(0, 0, 0, 21);
                         BorderColor3 = rgb(0, 0, 0);
                         BorderSizePixel = 0;
-                        AutomaticSize = Enum.AutomaticSize.Y;
+                        AutomaticSize = Enum.AutomaticSize.None;
                         BackgroundColor3 = themes.preset.inline
                     });	Library:Themify(Items.DropdownElements, "inline", "BackgroundColor3")
                     
@@ -2392,12 +2425,14 @@
                 Items.DropdownElements.Position = dim2(0, Items.Outline.AbsolutePosition.X, 0, Items.Outline.AbsolutePosition.Y + 80)
                 
                 -- Calculate appropriate height based on content, with max of 200
-                local contentHeight = Items.DropdownHolder.UIListLayout.AbsoluteContentSize.Y + 4
+                local layout = Items.DropdownHolder:FindFirstChildOfClass("UIListLayout")
+                local contentHeight = (layout and layout.AbsoluteContentSize.Y or 0) + 4
                 local maxHeight = 200
-                local actualHeight = math.min(contentHeight, maxHeight)
+                local actualHeight = math.min(math.max(contentHeight, 20), maxHeight)
                 
                 Items.DropdownElements.Size = dim_offset(Items.Outline.AbsoluteSize.X + 1, actualHeight)
                 Items.DropdownHolder.Size = dim2(1, -2, 0, actualHeight - 2)
+                Items.DropdownHolder.ScrollingEnabled = contentHeight > maxHeight
                 Items.DropdownElements.Visible = bool 
                 Items.DropdownElements.Parent = bool and Library.Items or Library.Other
 
@@ -2436,7 +2471,7 @@
                 for _,option in options do
                     local Button = Cfg.RenderOption(option)
                     
-                    Button.MouseButton1Down:Connect(function()
+                    Button.Activated:Connect(function()
                         if Cfg.Multi then 
                             local Selected = table.find(Cfg.MultiItems, Button.Text)
                             
@@ -2457,14 +2492,14 @@
                 end
             end
 
-            Items.Outline.MouseButton1Click:Connect(function()
+            Items.Outline.Activated:Connect(function()
                 Cfg.Open = not Cfg.Open 
 
                 Cfg.SetVisible(Cfg.Open)
             end)
 
             Library:Connection(InputService.InputBegan, function(input, game_event)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     if not Library:Hovering({Items.DropdownElements, Items.Dropdown}) then
                         Cfg.SetVisible(false)
                         Cfg.Open = false
@@ -2582,7 +2617,7 @@ function Library:Textbox(properties)
     }
 
 
-            Flags[Cfg.Flag] = Cfg.default
+            Flags[Cfg.Flag] = Cfg.Default
 
             local Items = Cfg.Items; do 
                 Items.Textbox = Library:Create( "Frame" , {
@@ -2636,18 +2671,20 @@ Items.Input = Library:Create("TextBox", {
     Parent = Items.Inline;
     FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal);
     Name = "\0";
-    Active = false;
+    Active = true;
     BorderColor3 = rgb(0, 0, 0);
     Text = tostring(Cfg.Default or "");
     PlaceholderText = tostring(Cfg.PlaceHolder or "Type here...");
-    Size = dim2(1, 0, 1, 0);
-    Selectable = false;
+    Size = dim2(1, -6, 1, 0);
+    Selectable = true;
     Position = dim2(0, 3, 0, 0);
     BorderSizePixel = 0;
     TextTruncate = Enum.TextTruncate.AtEnd;
     BackgroundTransparency = 1;
     TextXAlignment = Enum.TextXAlignment.Left;
-    AutomaticSize = Enum.AutomaticSize.XY;
+    AutomaticSize = Enum.AutomaticSize.None;
+    ClearTextOnFocus = false;
+    TextEditable = true;
     TextColor3 = rgb(239, 239, 239);
     TextSize = 14;
     BackgroundColor3 = rgb(255, 255, 255);
@@ -2655,20 +2692,36 @@ Items.Input = Library:Create("TextBox", {
                   
             end 
             
-            function Cfg.Set(text) 
+            local internalTextboxUpdate = false
+
+            function Cfg.Set(text)
                 Flags[Cfg.Flag] = text
 
-                Items.Input.Text = text
+                if Items.Input.Text ~= text then
+                    internalTextboxUpdate = true
+                    Items.Input.Text = text
+                    internalTextboxUpdate = false
+                end
 
                 Cfg.Callback(text)
-            end 
-            
-            Items.Input:GetPropertyChangedSignal("Text"):Connect(function()
-                Cfg.Set(Items.Input.Text) 
-            end) 
+            end
 
-            if Cfg.default then 
-                Cfg.Set(Cfg.default) 
+            Items.Input:GetPropertyChangedSignal("Text"):Connect(function()
+                if internalTextboxUpdate then
+                    return
+                end
+
+                Flags[Cfg.Flag] = Items.Input.Text
+                Cfg.Callback(Items.Input.Text)
+            end)
+
+            -- Mobile: ensure tapping actually focuses the textbox
+            Items.Input.TouchTap:Connect(function()
+                Items.Input:CaptureFocus()
+            end)
+
+            if Cfg.Default ~= nil and Cfg.Default ~= "" then 
+                Cfg.Set(Cfg.Default) 
             end
 
             ConfigFlags[Cfg.Flag] = Cfg.Set
