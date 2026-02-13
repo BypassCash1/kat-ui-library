@@ -3788,25 +3788,38 @@ function Group:AddDropdown(label, options, default, callback, flag)
 		UpdateList = function(self, newOptions)
 			if type(newOptions) == "table" then
 				options = normalizeOptions(newOptions)
-				
-				-- Keep current selection if still valid
-				local currentSelection = selected
 				if not selectionExists(selected) then
-					-- If current selection no longer exists, pick first option
-					if #options > 0 then
-						setSelected(options[1].value or options[1], false)
-					else
-						setSelected(nil, false)
-					end
+					setSelected(nil, false)
 				end
-				
-				-- Rebuild popup if open
 				if open and rebuildPopup then
 					rebuildPopup()
 				end
-				
-				-- Update display even if closed
-				updateDisplay()
+			end
+			return self
+		end,
+		EnableAutoRefresh = function(self, refreshInterval, getOptionsFunc)
+			-- Auto-refresh dropdown options every X seconds
+			if self._autoRefreshThread then
+				task.cancel(self._autoRefreshThread)
+			end
+			
+			if refreshInterval and getOptionsFunc and type(getOptionsFunc) == "function" then
+				self._autoRefreshThread = task.spawn(function()
+					while true do
+						task.wait(refreshInterval or 1)
+						local newOpts = getOptionsFunc()
+						if type(newOpts) == "table" then
+							self:UpdateList(newOpts)
+						end
+					end
+				end)
+			end
+			return self
+		end,
+		DisableAutoRefresh = function(self)
+			if self._autoRefreshThread then
+				task.cancel(self._autoRefreshThread)
+				self._autoRefreshThread = nil
 			end
 			return self
 		end,
